@@ -1,14 +1,14 @@
-main(void){
+int main(void){
 	initStorageManager();
 	testName="";
-	
+
 	testCreatingAndReadingDummyPages();
 	testReadPage();
 	testFIFO();
 	testLRU();
 }
 
-testCreatingAndReadingDummyPages(void){
+void testCreatingAndReadingDummyPages(void){
 	BM_BufferPool *bm=MAKE_POOL();
 	testName="Creating and Reading Back Dummy Pages";
 	CHECK(createPageFile("testbuffer.bin"));
@@ -18,7 +18,22 @@ testCreatingAndReadingDummyPages(void){
 	checkDummyPages(bm,10000);
 
 	CHECK(destroyPageFile("testbuffer.bin"));
-	
+
 	free(bm);
 	TEST_DONE();
+}
+
+void createDummyPages(BM_BufferPool *bm,int num){
+	int i;
+	BM_PageHandle *h=MAKE_PAGE_HANDLE();
+	CHECK(initBufferPool(bm,"testbuffer.bin",3,RS_FIFO,NULL));
+	for(i=0;i<num;i++)
+	{
+		CHECK(pinPage(bm,h,i));
+		sprintf(h->data,"%s-%i","Page",h->pageNum);
+		CHECK(markDirty(bm,h));
+		CHECK(unpinPage(bm,h));
+	}
+	CHECK(shutdownBufferPool(bm));
+	free(h);
 }
