@@ -45,6 +45,88 @@ RC initBufferPool(BM_BufferPool *const bm,const char *const pageFileName,const i
 	return RC_OK;
 }
 
+BufferFrame* addPagetoPool(BM_BufferPool *const bm,const PageNumber pageNum)
+{
+	int i,pos,k;
+	BufferFrame *bf,*p,*l,*tempBf,*q;
+	SM_FileHandle fh;
+	
+	p=bm->mgmtData;
+	bf=initBufferFrame(p->recordPos);
+	openPageFile(bm->pageFile,&fh);
+	ensureCapacity(pageNum+1,&fh);
+	readBlock(pageNum,&fh,bf->ph.data);
+	record[p->recordPos].numRead++;
+	bf->ph.pageNum=pageNum;
+	closePageFile(&fh);
+	
+	switch(bm->strategy)
+	{
+		case RS_FIFO:
+			pos=record[p->recordPos].rPos;
+			for(i=0;i<pos;i++)
+			{
+				l=p;
+				p=p->next;	
+			}
+			if(p->fixcount>0)
+			{
+				for(i=0;p->fixcount>0&&i<bm->numPages;i++)
+				{
+					if(p->next==NULL)
+					{
+						p=bm->mgmtData;
+					}
+					else
+					{
+						p=p->next;
+					}
+				}
+				if(i==bm->numPages)
+				{
+					printf("All pages in the buffer are under use,pin failed.\n");
+					return NULL;
+				}
+			}
+			
+			tempBf=bm->mgmtData;
+			q=NULL;
+			
+			for(k=0;k<bm->numPages;k++)
+			{
+				if(tempBf->ph.pageNum==p->ph.pageNum)
+					break;
+				q=tempBf;
+				tempBf=tempBf->next;
+			}
+			l=q;
+			
+			if(p->dirty)
+			{
+				openPageFile(bm->pageFile,&fh);
+				ensureCapacity(p->ph.pageNum+1,&fh);
+				writeBlock(p->ph.pageNum,&fh,p->ph.data);
+				record[p->recordPos].numWrite++;
+				closePageFile(&fh);
+			}
+			if(l==NULL)
+			{
+				bf->next=p->next;
+				bm->mgmtData=bf;
+			}
+			else
+			{
+				bf->next=p->next;
+				l->next=bf;
+			}
+			
+			record[p->recordPos].rPos=(record[p->recordPos].rPos+1)%bm->numPages;
+			freeBufferFrame(p);
+			break;
+	}
+	return bf;
+}
+
 RC pinPage(BM_BufferPool *const bm,BM_PageHandle *const page,const PageNumber pageNum)
 {
 	int i;
