@@ -44,3 +44,43 @@ RC initBufferPool(BM_BufferPool *const bm,const char *const pageFileName,const i
 	curPools++;
 	return RC_OK;
 }
+
+RC pinPage(BM_BufferPool *const bm,BM_PageHandle *const page,const PageNumber pageNum)
+{
+	int i;
+	BufferFrame *bf,*tempBf,*p,*q;
+	
+	tempBf=bm->mgmtData;
+	for(i=0;i<bm->numPages;i++){
+		if(tempBf->ph.pageNum==pageNum)
+			break;
+		tempBf=tempBf->next;
+	}
+	bf=tempBf;
+	
+	if(bf==NULL)
+	{
+		bf=addPagetoPool(bm,pageNum);
+		if(bf==NULL)
+			return FALSE;
+	}
+	
+	switch(bm->strategy)
+	{
+		case RS_FIFO:
+			break;
+	
+	}
+	
+	bf->fixcount++;
+	page->data=(char*)malloc(sizeof(char)*PAGE_SIZE);
+	
+	while(!record[bf->recordPos].freeAccess)
+		sleep(0.5);
+	record[bf->recordPos].freeAccess=FALSE;
+	strcpy(page->data,bf->ph.data);
+	record[bf->recordPos].freeAccess=TRUE;
+	page->pageNum=bf->ph.pageNum;
+	
+	return RC_OK;	
+}
