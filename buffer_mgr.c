@@ -166,3 +166,102 @@ RC pinPage(BM_BufferPool *const bm,BM_PageHandle *const page,const PageNumber pa
 	
 	return RC_OK;	
 }
+
+RC markDirty(BM_BufferPool *const bm,BM_PageHandle *const page)
+{
+	int i,j;
+	BufferFrame *bf;
+	bf=bm->mgmtData;
+	for(i=0;i<bm->numPages;i++)
+	{
+		if(bf->ph.pageNum==page->pageNum)
+		{
+			bf->dirty=TRUE;
+			return RC_OK;
+		}
+		bf=bf->next;
+	}
+	return FALSE;
+}
+
+RC unpinPage(BM_BufferPool *const bm, BM_PageHandle *const page)
+{
+    int i;
+	BufferFrame *bf, *tempBf;
+	//SM_FileHandle fileHandle;
+    
+    //Check wheter the desired page exists in the buffer pool
+    tempBf = bm->mgmtData;
+    for(i=0;i<bm->numPages;i++)
+    {
+        if(tempBf->ph.pageNum == page->pageNum)
+            break;
+        tempBf = tempBf->next;
+    }
+    bf = tempBf;
+	
+    if(bf==NULL)
+        return FALSE;
+
+	while(!record[bf->recordPos].freeAccess)
+	{
+		sleep(0.5);		
+	}
+    
+	record[bf->recordPos].freeAccess = FALSE;
+	strcpy(bf->ph.data, page->data);
+	record[bf->recordPos].freeAccess = TRUE;
+	free(page->data);
+	bf->fixcount--;
+	
+    return RC_OK;
+}
+
+RC shutdownBufferPool(BM_BufferPool *const bm)
+{
+	int i;
+    char *freeBf;
+	BufferFrame *bf, *tempBf;
+	//Pointer to address the chain table
+    BufferFrame *p;
+    SM_FileHandle fileHandle;
+	
+    //Get the handle of Buffer Pool
+    bf = bm->mgmtData;
+	
+    for(i= 0; i< bm->numPages && bf!=NULL; i++)
+	{
+		if( bf->fixcount>0 )
+            return FALSE;
+		bf = bf->next;
+	}
+    
+    //Get the last bf and did corresponding operations
+	bf = bm->mgmtData;
+	p = bf->next;
+	openPageFile(bm->pageFile, &fileHandle);
+    
+    //Clean the free resouces used
+	for(i= 0; i< bm->numPages && bf!=NULL; i++)
+	{
+		if( bf->dirty )
+        {
+			ensureCapacity(bf->ph.pageNum, &fileHandle);
+			writeBlock(bf->ph.pageNum, &fileHandle, bf->ph.data);
+			record[bf->recordPos].numWrite++;
+		}
+		
+        //Free Buffer Frame
+        tempBf = bf;
+        freeBf=tempBf->ph.data;
+        free(freeBf);
+        free(tempBf);
+        
+		bf=p;
+		if(p->next!=NULL)
+			p=p->next;
+	}
+	closePageFile(&fileHandle);
+    
+	return RC_OK;
+}
